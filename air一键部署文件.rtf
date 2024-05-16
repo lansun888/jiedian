@@ -1,0 +1,247 @@
+{\rtf1\ansi\ansicpg936\cocoartf2708
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720\partightenfactor0
+
+\f0\fs26 \cf0 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 #!/bin/bash\
+\
+# \uc0\u26816 \u26597 \u26159 \u21542 \u20197 root\u29992 \u25143 \u36816 \u34892 \u33050 \u26412 \
+if [ "$(id -u)" != "0" ]; then\
+    echo "\uc0\u27492 \u33050 \u26412 \u38656 \u35201 \u20197 root\u29992 \u25143 \u26435 \u38480 \u36816 \u34892 \u12290 "\
+    echo "\uc0\u35831 \u23581 \u35797 \u20351 \u29992  'sudo -i' \u21629 \u20196 \u20999 \u25442 \u21040 root\u29992 \u25143 \u65292 \u28982 \u21518 \u20877 \u27425 \u36816 \u34892 \u27492 \u33050 \u26412 \u12290 "\
+    exit 1\
+fi\
+\
+# \uc0\u26816 \u26597 \u24182 \u23433 \u35013  Node.js \u21644  npm\
+function install_nodejs_and_npm() \{\
+    if command -v node > /dev/null 2>&1; then\
+        echo "Node.js \uc0\u24050 \u23433 \u35013 "\
+    else\
+        echo "Node.js \uc0\u26410 \u23433 \u35013 \u65292 \u27491 \u22312 \u23433 \u35013 ..."\
+        curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -\
+        sudo apt-get install -y nodejs\
+    fi\
+\
+    if command -v npm > /dev/null 2>&1; then\
+        echo "npm \uc0\u24050 \u23433 \u35013 "\
+    else\
+        echo "npm \uc0\u26410 \u23433 \u35013 \u65292 \u27491 \u22312 \u23433 \u35013 ..."\
+        sudo apt-get install -y npm\
+    fi\
+\}\
+\
+# \uc0\u26816 \u26597 \u24182 \u23433 \u35013  PM2\
+function install_pm2() \{\
+    if command -v pm2 > /dev/null 2>&1; then\
+        echo "PM2 \uc0\u24050 \u23433 \u35013 "\
+    else\
+        echo "PM2 \uc0\u26410 \u23433 \u35013 \u65292 \u27491 \u22312 \u23433 \u35013 ..."\
+        npm install pm2@latest -g\
+    fi\
+\}\
+\
+# \uc0\u26816 \u26597 Go\u29615 \u22659 \
+function check_go_installation() \{\
+    if command -v go > /dev/null 2>&1; then\
+        echo "Go \uc0\u29615 \u22659 \u24050 \u23433 \u35013 "\
+        return 0 \
+    else\
+        echo "Go \uc0\u29615 \u22659 \u26410 \u23433 \u35013 \u65292 \u27491 \u22312 \u23433 \u35013 ..."\
+        return 1 \
+    fi\
+\}\
+\
+# \uc0\u33410 \u28857 \u23433 \u35013 \u21151 \u33021 \
+function install_node() \{\
+    install_nodejs_and_npm\
+    install_pm2\
+\
+    # \uc0\u26356 \u26032 \u21644 \u23433 \u35013 \u24517 \u35201 \u30340 \u36719 \u20214 \
+    sudo apt update && sudo apt upgrade -y\
+    sudo apt install -y curl iptables build-essential git wget jq make gcc nano tmux htop nvme-cli pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip libleveldb-dev lz4 snapd\
+\
+    # \uc0\u23433 \u35013  Go\
+    if ! check_go_installation; then\
+        sudo rm -rf /usr/local/go\
+        curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | sudo tar -xzf - -C /usr/local\
+        echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin' >> $HOME/.bash_profile\
+        source $HOME/.bash_profile\
+        go version\
+    fi\
+\
+    # \uc0\u23433 \u35013 \u25152 \u26377 \u20108 \u36827 \u21046 \u25991 \u20214 \
+    wget https://github.com/airchains-network/junction/releases/download/v0.1.0/junctiond\
+    chmod +x junctiond\
+    sudo mv junctiond /usr/local/go/bin\
+\
+    # \uc0\u37197 \u32622 junctiond\
+    junctiond config chain-id junction\
+    junctiond init "Moniker" --chain-id junction\
+    junctiond config node tcp://localhost:43457\
+\
+    # \uc0\u33719 \u21462 \u21021 \u22987 \u25991 \u20214 \u21644 \u22320 \u22336 \u31807 \
+    wget -O $HOME/.junction/config/genesis.json https://github.com/airchains-network/junction/releases/download/v0.1.0/genesis.json\
+    wget https://smeby.fun/airchains-addrbook.json -O $HOME/.junction/config/addrbook.json\
+    sed -i.bak -e "s/^minimum-gas-prices *=.*/minimum-gas-prices = \\"0.025amf\\"/;" ~/.junction/config/app.toml\
+\
+    # \uc0\u37197 \u32622 \u33410 \u28857 \
+    SEEDS=""\
+    PEERS="de2e7251667dee5de5eed98e54a58749fadd23d8@34.22.237.85:26656,1918bd71bc764c71456d10483f754884223959a5@35.240.206.208:26656,48887cbb310bb854d7f9da8d5687cbfca02b9968@35.200.245.190:26656,de2e7251667dee5de5eed98e54a58749fadd23d8@34.22.237.85:26656,8b72b2f2e027f8a736e36b2350f6897a5e9bfeaa@131.153.232.69:26656,e09fa8cc6b06b99d07560b6c33443023e6a3b9c6@65.21.131.187:26656,5c5989b5dee8cff0b379c4f7273eac3091c3137b@57.128.74.22:56256,086d19f4d7542666c8b0cac703f78d4a8d4ec528@135.148.232.105:26656,0305205b9c2c76557381ed71ac23244558a51099@162.55.65.162:26656,3e5f3247d41d2c3ceeef0987f836e9b29068a3e9@168.119.31.198:56256,6a2f6a5cd2050f72704d6a9c8917a5bf0ed63b53@93.115.25.41:26656,eb4d2c546be8d2dc62d41ff5e98ef4ee96d2ff29@46.250.233.5:26656,7d6694fb464a9c9761992f695e6ba1d334403986@164.90.228.66:26656,b2e9bebc16bc35e16573269beba67ffea5932e13@95.111.239.250:26656,23152e91e3bd642bef6508c8d6bd1dbedccf9e56@95.111.237.24:26656,c1e9d12d80ec74b8ddbabdec9e0dad71337ba43f@135.181.82.176:26656,3b429f2c994fa76f9443e517fd8b72dcf60e6590@37.27.11.132:26656,84b6ccf69680c9459b3b78ca4ba80313fa9b315a@159.69.208.30:26656"\
+    sed -i 's|^persistent_peers *=.*|persistent_peers = "'$PEERS'"|' $HOME/.junction/config/config.toml\
+\
+\
+    # \uc0\u37197 \u32622 \u31471 \u21475 \
+    node_address="tcp://localhost:43457"\
+    sed -i -e "s%^proxy_app = \\"tcp://127.0.0.1:26658\\"%proxy_app = \\"tcp://127.0.0.1:43458\\"%; s%^laddr = \\"tcp://127.0.0.1:26657\\"%laddr = \\"tcp://127.0.0.1:43457\\"%; s%^pprof_laddr = \\"localhost:6060\\"%pprof_laddr = \\"localhost:43460\\"%; s%^laddr = \\"tcp://0.0.0.0:26656\\"%laddr = \\"tcp://0.0.0.0:43456\\"%; s%^prometheus_listen_addr = \\":26660\\"%prometheus_listen_addr = \\":43466\\"%" $HOME/.junction/config/config.toml\
+    sed -i -e "s%^address = \\"tcp://localhost:1317\\"%address = \\"tcp://0.0.0.0:43417\\"%; s%^address = \\":8080\\"%address = \\":43480\\"%; s%^address = \\"localhost:9090\\"%address = \\"0.0.0.0:43490\\"%; s%^address = \\"localhost:9091\\"%address = \\"0.0.0.0:43491\\"%; s%:8545%:43445%; s%:8546%:43446%; s%:6065%:43465%" $HOME/.junction/config/app.toml\
+    echo "export junctiond_RPC_PORT=$node_address" >> $HOME/.bash_profile\
+    source $HOME/.bash_profile   \
+\
+    pm2 start junctiond -- start && pm2 save && pm2 startup\
+\
+    curl -L http://148.113.6.240/airchains_snapshots.tar.lz4 | tar -I lz4 -xf - -C $HOME/.junction/data\
+    mv $HOME/.junction/priv_validator_state.json.backup $HOME/.junction/data/priv_validator_state.json\
+    \
+    # \uc0\u20351 \u29992  PM2 \u21551 \u21160 \u33410 \u28857 \u36827 \u31243 \
+\
+    pm2 restart junctiond\
+\
+    echo '====================== \uc0\u23433 \u35013 \u23436 \u25104 ,\u35831 \u36864 \u20986 \u33050 \u26412 \u21518 \u25191 \u34892  source $HOME/.bash_profile \u20197 \u21152 \u36733 \u29615 \u22659 \u21464 \u37327 ==========================='\
+    \
+\}\
+\
+# \uc0\u26597 \u30475 junction \u26381 \u21153 \u29366 \u24577 \
+function check_service_status() \{\
+    pm2 list\
+\}\
+\
+# junction \uc0\u33410 \u28857 \u26085 \u24535 \u26597 \u35810 \
+function view_logs() \{\
+    pm2 logs junctiond\
+\}\
+\
+# \uc0\u21368 \u36733 \u33410 \u28857 \u21151 \u33021 \
+function uninstall_node() \{\
+    echo "\uc0\u20320 \u30830 \u23450 \u35201 \u21368 \u36733 junction \u33410 \u28857 \u31243 \u24207 \u21527 \u65311 \u36825 \u23558 \u20250 \u21024 \u38500 \u25152 \u26377 \u30456 \u20851 \u30340 \u25968 \u25454 \u12290 [Y/N]"\
+    read -r -p "\uc0\u35831 \u30830 \u35748 : " response\
+\
+    case "$response" in\
+        [yY][eE][sS]|[yY]) \
+            echo "\uc0\u24320 \u22987 \u21368 \u36733 \u33410 \u28857 \u31243 \u24207 ..."\
+            pm2 stop junctiond && pm2 delete junctiond\
+            rm -rf $HOME/.junctiond && rm -rf $HOME/junction $(which junctiond) && rm -rf $HOME/.junction\
+            echo "\uc0\u33410 \u28857 \u31243 \u24207 \u21368 \u36733 \u23436 \u25104 \u12290 "\
+            ;;\
+        *)\
+            echo "\uc0\u21462 \u28040 \u21368 \u36733 \u25805 \u20316 \u12290 "\
+            ;;\
+    esac\
+\}\
+\
+# \uc0\u21019 \u24314 \u38065 \u21253 \
+function add_wallet() \{\
+    junctiond keys add wallet\
+\}\
+\
+# \uc0\u23548 \u20837 \u38065 \u21253 \
+function import_wallet() \{\
+    junctiond keys add wallet --recover\
+\}\
+\
+# \uc0\u26597 \u35810 \u20313 \u39069 \
+function check_balances() \{\
+    read -p "\uc0\u35831 \u36755 \u20837 \u38065 \u21253 \u22320 \u22336 : " wallet_address\
+    junctiond query bank balances "$wallet_address" --node $junctiond_RPC_PORT\
+\}\
+\
+# \uc0\u26597 \u30475 \u33410 \u28857 \u21516 \u27493 \u29366 \u24577 \
+function check_sync_status() \{\
+    junctiond status 2>&1 --node $junctiond_RPC_PORT | jq .sync_info\
+\}\
+\
+# \uc0\u21019 \u24314 \u39564 \u35777 \u32773 \
+function add_validator() \{\
+    read -p "\uc0\u35831 \u36755 \u20837 \u20320 \u30340 \u39564 \u35777 \u32773 \u21517 \u31216 : " validator_name\
+    sudo tee ~/validator.json > /dev/null <<EOF\
+\{\
+  "pubkey": $(junctiond tendermint show-validator),\
+  "amount": "1000000amf",\
+  "moniker": "$validator_name",\
+  "details": "dalubi",\
+  "commission-rate": "0.10",\
+  "commission-max-rate": "0.20",\
+  "commission-max-change-rate": "0.01",\
+  "min-self-delegation": "1"\
+\}\
+\
+EOF\
+    junctiond tx staking create-validator $HOME/validator.json --node $junctiond_RPC_PORT \\\
+    --from=wallet \\\
+    --chain-id=junction \\\
+    --fees 10000amf\
+\}\
+\
+\
+# \uc0\u32473 \u33258 \u24049 \u22320 \u22336 \u39564 \u35777 \u32773 \u36136 \u25276 \
+function delegate_self_validator() \{\
+read -p "\uc0\u35831 \u36755 \u20837 \u36136 \u25276 \u20195 \u24065 \u25968 \u37327 ,\u27604 \u22914 \u20320 \u26377 1\u20010 amf,\u35831 \u36755 \u20837 1000000\u65292 \u20197 \u27492 \u31867 \u25512 : " math\
+read -p "\uc0\u35831 \u36755 \u20837 \u38065 \u21253 \u21517 \u31216 : " wallet_name\
+junctiond tx staking delegate $(junctiond keys show $wallet_name --bech val -a)  $\{math\}amf --from $wallet_name --chain-id=junction --fees 10000amf --node $junctiond_RPC_PORT  -y\
+\
+\}\
+\
+function unjail() \{\
+read -p "\uc0\u35831 \u36755 \u20837 \u38065 \u21253 \u21517 \u31216 : " wallet_name\
+junctiond tx slashing unjail --from $wallet_name --fees=10000amf --chain-id=junction --node $junctiond_RPC_PORT\
+\
+\}\
+\
+\
+# \uc0\u20027 \u33756 \u21333 \
+function main_menu() \{\
+    while true; do\
+        clear\
+        echo "\uc0\u36864 \u20986 \u33050 \u26412 \u65292 \u35831 \u25353 \u38190 \u30424 ctrl c\u36864 \u20986 \u21363 \u21487 "\
+        echo "\uc0\u35831 \u36873 \u25321 \u35201 \u25191 \u34892 \u30340 \u25805 \u20316 :"\
+        echo "1. \uc0\u23433 \u35013 \u33410 \u28857 "\
+        echo "2. \uc0\u21019 \u24314 \u38065 \u21253 "\
+        echo "3. \uc0\u23548 \u20837 \u38065 \u21253 "\
+        echo "4. \uc0\u26597 \u30475 \u38065 \u21253 \u22320 \u22336 \u20313 \u39069 "\
+        echo "5. \uc0\u26597 \u30475 \u33410 \u28857 \u21516 \u27493 \u29366 \u24577 "\
+        echo "6. \uc0\u26597 \u30475 \u24403 \u21069 \u26381 \u21153 \u29366 \u24577 "\
+        echo "7. \uc0\u36816 \u34892 \u26085 \u24535 \u26597 \u35810 "\
+        echo "8. \uc0\u21368 \u36733 \u33410 \u28857 "\
+        echo "9. \uc0\u35774 \u32622 \u24555 \u25463 \u38190 "  \
+        echo "10. \uc0\u21019 \u24314 \u39564 \u35777 \u32773 "  \
+        echo "11. \uc0\u32473 \u33258 \u24049 \u36136 \u25276 " \
+        echo "12. \uc0\u37322 \u25918 \u20986 \u30417 \u29425 "\
+        read -p "\uc0\u35831 \u36755 \u20837 \u36873 \u39033 \u65288 1-11\u65289 : " OPTION\
+\
+        case $OPTION in\
+        1) install_node ;;\
+        2) add_wallet ;;\
+        3) import_wallet ;;\
+        4) check_balances ;;\
+        5) check_sync_status ;;\
+        6) check_service_status ;;\
+        7) view_logs ;;\
+        8) uninstall_node ;;\
+        9) check_and_set_alias ;;\
+        10) add_validator ;;\
+        11) delegate_self_validator ;;\
+        12) unjail ;;\
+        *) echo "\uc0\u26080 \u25928 \u36873 \u39033 \u12290 " ;;\
+        esac\
+        echo "\uc0\u25353 \u20219 \u24847 \u38190 \u36820 \u22238 \u20027 \u33756 \u21333 ..."\
+        read -n 1\
+    done\
+    \
+\}\
+\
+# \uc0\u26174 \u31034 \u20027 \u33756 \u21333 \
+main_menu\
+}
